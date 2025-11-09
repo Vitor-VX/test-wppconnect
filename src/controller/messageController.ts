@@ -18,6 +18,10 @@ import { Request, Response } from 'express';
 
 import { unlinkAsync } from '../util/functions';
 
+import mime from 'mime';
+import { fromUrlToPtt, urlToBase64 } from '../util/urlToBase64';
+import { logger } from '..';
+
 function returnError(req: Request, res: Response, error: any) {
   req.logger.error(error);
   res.status(500).json({
@@ -29,6 +33,23 @@ function returnError(req: Request, res: Response, error: any) {
 
 async function returnSucess(res: any, data: any) {
   res.status(201).json({ status: 'success', response: data, mapper: 'return' });
+}
+
+export async function sendMessageMyNumber(req: Request, res: Response) {
+  const { message } = req.body;
+  const options = req.body.options || {};
+
+  try {
+    const myId = await req.client.getWid();
+    const result = await req.client.sendText(myId, message, options);
+
+    if (!result)
+      return res.status(400).json({ error: 'Erro ao enviar mensagem' });
+
+    returnSucess(res, result);
+  } catch (error) {
+    returnError(req, res, error);
+  }
 }
 
 export async function sendMessage(req: Request, res: Response) {
@@ -101,6 +122,57 @@ export async function sendMessage(req: Request, res: Response) {
     }
 
     if (results.length === 0) res.status(400).json('Error sending message');
+    req.io.emit('mensagem-enviada', results);
+    returnSucess(res, results);
+  } catch (error) {
+    returnError(req, res, error);
+  }
+}
+
+export async function sendPix(req: Request, res: Response) {
+  const { phone, pixKey, name, instructions, keyType } = req.body;
+
+  try {
+    if (!pixKey) {
+      return res.status(400).json({ error: 'A chave PIX é obrigatória.' });
+    }
+
+    if (!phone || !Array.isArray(phone) || phone.length === 0) {
+      return res.status(400).json({ error: 'Lista de contatos inválida.' });
+    }
+
+    const results: any[] = [];
+
+    for (const contato of phone) {
+      try {
+        const pixResult = await req.client.sendPixKey(`${contato}`, {
+          keyType: keyType,
+          name: name,
+          key: pixKey,
+          instructions: instructions,
+        });
+
+        results.push({
+          contato,
+          pix: pixResult,
+          status: 'sent',
+        });
+      } catch (err: any) {
+        console.error(`[sendPix] Falha ao enviar para ${contato}:`, err);
+        results.push({
+          contato,
+          error: err.message,
+          status: 'failed',
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      return res
+        .status(400)
+        .json({ error: 'Nenhuma mensagem PIX foi enviada.' });
+    }
+
     req.io.emit('mensagem-enviada', results);
     returnSucess(res, results);
   } catch (error) {
@@ -215,7 +287,8 @@ export async function sendFile(req: Request, res: Response) {
       message: 'Sending the file is mandatory',
     });
 
-  const pathFile = path || base64 || req.file?.path;
+  // const pathFile = path || base64 || req.file?.path;
+  const pathFile = await urlToBase64(base64);
   const msg = message || caption;
 
   try {
@@ -226,7 +299,7 @@ export async function sendFile(req: Request, res: Response) {
           filename: filename,
           caption: msg,
           quotedMsg: quotedMessageId,
-          ...options,
+          type: 'audio',
         })
       );
     }
@@ -276,6 +349,7 @@ export async function sendVoice(req: Request, res: Response) {
         }
     }
    */
+
   const {
     phone,
     path,
@@ -286,15 +360,11 @@ export async function sendVoice(req: Request, res: Response) {
 
   try {
     const results: any = [];
+    const { base64, filename } = await fromUrlToPtt(path);
+
     for (const contato of phone) {
       results.push(
-        await req.client.sendPtt(
-          contato,
-          path,
-          filename,
-          message,
-          quotedMessageId
-        )
+        await req.client.sendPttFromBase64(contato, base64, filename, '')
       );
     }
 
