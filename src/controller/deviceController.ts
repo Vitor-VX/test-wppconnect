@@ -1724,47 +1724,19 @@ export async function setTemporaryMessages(req: Request, res: Response) {
 }
 
 export async function setTyping(req: Request, res: Response) {
-  /**
-     #swagger.tags = ["Chat"]
-     #swagger.autoBody=false
-     #swagger.security = [{
-            "bearerAuth": []
-     }]
-     #swagger.parameters["session"] = {
-      schema: 'NERDWHATS_AMERICA'
-     }
-     #swagger.requestBody = {
-      required: true,
-      "@content": {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              phone: { type: "string" },
-              isGroup: { type: "boolean" },
-              value: { type: "boolean" },
-            }
-          },
-          examples: {
-            "Default": {
-              value: {
-                phone: "5521999999999",
-                isGroup: false,
-                value: true,
-              }
-            },
-          }
-        }
-      }
-     }
-   */
-  const { phone, value = true, isGroup = false } = req.body;
+  const { phone, duration = 3000, value = true, isGroup = false } = req.body;
   try {
     let response;
-    for (const contato of contactToArray(phone, isGroup)) {
-      if (value) response = await req.client.startTyping(contato);
-      else response = await req.client.stopTyping(contato);
-    }
+    // for (const contato of contactToArray(phone, isGroup)) {
+    //   if (value) response = await req.client.startTyping(contato);
+    //   else response = await req.client.stopTyping(contato);
+    // }
+
+    const dur = duration ? Number(duration) : undefined;
+    const phoneFormat = phone ? String(`${phone}`) : '';
+
+    if (value) response = await req.client.startTyping(phoneFormat, dur);
+    else response = await req.client.stopTyping(phoneFormat);
 
     res.status(200).json({ status: 'success', response: response });
   } catch (error) {
@@ -1776,50 +1748,17 @@ export async function setTyping(req: Request, res: Response) {
 }
 
 export async function setRecording(req: Request, res: Response) {
-  /**
-     #swagger.tags = ["Chat"]
-     #swagger.autoBody=false
-     #swagger.security = [{
-            "bearerAuth": []
-     }]
-     #swagger.parameters["session"] = {
-      schema: 'NERDWHATS_AMERICA'
-     }
-     
-     #swagger.requestBody = {
-      required: true,
-      "@content": {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              phone: { type: "string" },
-              isGroup: { type: "boolean" },
-              duration: { type: "number" },
-              value: { type: "boolean" },
-            }
-          },
-          examples: {
-            "Default": {
-              value: {
-                phone: "5521999999999",
-                isGroup: false,
-                duration: 5,
-                value: true,
-              }
-            },
-          }
-        }
-      }
-     }
-   */
   const { phone, value = true, duration, isGroup = false } = req.body;
   try {
     let response;
-    for (const contato of contactToArray(phone, isGroup)) {
-      if (value) response = await req.client.startRecording(contato, duration);
-      else response = await req.client.stopRecoring(contato);
-    }
+
+    // for (const contato of contactToArray(phone, isGroup)) {}
+
+    const dur = duration ? Number(duration) : undefined;
+    const phoneFormat = phone ? String(`${phone}`) : '';
+
+    if (value) response = await req.client.startRecording(phoneFormat, dur);
+    else response = await req.client.stopRecoring(phoneFormat);
 
     res.status(200).json({ status: 'success', response: response });
   } catch (error) {
