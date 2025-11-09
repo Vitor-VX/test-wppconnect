@@ -16,11 +16,13 @@
 
 import { Request, Response } from 'express';
 import fs from 'fs';
+import path from 'path';
 
 import { logger } from '..';
 import config from '../config';
 import { backupSessions, restoreSessions } from '../util/manageSession';
 import { clientsArray } from '../util/sessionUtil';
+import { execSync } from 'child_process';
 
 export async function backupAllSessions(req: Request, res: Response) {
   /**
@@ -135,18 +137,6 @@ export async function takeScreenshot(req: Request, res: Response) {
 }
 
 export async function clearSessionData(req: Request, res: Response) {
-  /**
-   #swagger.tags = ["Misc"]
-   #swagger.autoBody=false
-    #swagger.parameters["secretkey"] = {
-    required: true,
-    schema: 'THISISMYSECURETOKEN'
-    }
-    #swagger.parameters["session"] = {
-    schema: 'NERDWHATS_AMERICA'
-    }
-  */
-
   try {
     const { secretkey, session } = req.params;
 
@@ -156,20 +146,49 @@ export async function clearSessionData(req: Request, res: Response) {
         message: 'The token is incorrect',
       });
     }
+
     if (req?.client?.page) {
       delete clientsArray[req.params.session];
       await req.client.logout();
     }
-    const path = config.customUserDataDir + session;
-    const pathToken = __dirname + `../../../tokens/${session}.data.json`;
-    if (fs.existsSync(path)) {
-      await fs.promises.rm(path, {
-        recursive: true,
-      });
+
+    const pathUserData = path.join(config.customUserDataDir, session);
+    const pathToken = path.join(
+      __dirname,
+      '../../../wpp-server/tokens',
+      `${session}.data.json`
+    );
+
+    if (fs.existsSync(pathUserData)) {
+      const fullPath = path.resolve(pathUserData);
+
+      try {
+        console.log("Matando processos que usam:", fullPath);
+
+        const cmd = `ps aux | grep "${session}" | grep -v grep | awk '{print $2}' | xargs -r kill -9`;
+        execSync(cmd, { stdio: "ignore", shell: "/bin/bash" });
+
+        console.log("✅ Todos os processos Chromium dessa sessão foram encerrados");
+      } catch (err: any) {
+        console.warn("⚠️ Ignorando erro ao tentar matar processo:", err.message);
+      }
+
+      await new Promise(res => setTimeout(res, 1000));
+
+      try {
+        await fs.promises.rm(fullPath, { recursive: true, force: true });
+        console.log(`💀 Sessão ${session} encerrada e diretório removido`);
+      } catch (e: any) {
+        console.error("Falha ao remover sessão:", e.message);
+      }
     }
+
     if (fs.existsSync(pathToken)) {
-      await fs.promises.rm(pathToken);
+      await fs.promises.rm(pathToken, { force: true });
     }
+
+    delete clientsArray[req.params.session];
+
     res.status(200).json({ success: true });
   } catch (error: any) {
     logger.error(error);
