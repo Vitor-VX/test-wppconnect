@@ -19,6 +19,7 @@ import fs from 'fs';
 import mime from 'mime-types';
 import QRCode from 'qrcode';
 import { Logger } from 'winston';
+import pidusage from 'pidusage';
 
 import { version } from '../../package.json';
 import config from '../config';
@@ -146,27 +147,45 @@ export async function startAllSessions(
     .json({ status: 'success', message: 'Starting all sessions' });
 }
 
+// export async function showAllSessions(
+//   req: Request,
+//   res: Response
+// ): Promise<any> {
+//   const { secretkey } = req.params;
+//   const { authorization: token } = req.headers;
+
+//   let tokenDecrypt: any = "";
+
+//   if (secretkey === undefined) {
+//     tokenDecrypt = token?.split(' ')[0];
+//   } else {
+//     tokenDecrypt = secretkey;
+//   }
+
+//   const arr: any = [];
+
+//   if (tokenDecrypt !== req.serverOptions.secretKey) {
+//     res.status(400).json({
+//       response: false,
+//       message: 'The token is incorrect',
+//     });
+//   }
+
+//   Object.keys(clientsArray).forEach((item) => {
+//     arr.push({ session: item });
+//   });
+
+//   res.status(200).json({ response: await getAllTokens(req) });
+// }
+
 export async function showAllSessions(
   req: Request,
   res: Response
 ): Promise<any> {
-  /**
-   * #swagger.tags = ["Auth"]
-     #swagger.autoBody=false
-     #swagger.operationId = 'showAllSessions'
-     #swagger.autoQuery=false
-     #swagger.autoHeaders=false
-     #swagger.security = [{
-            "bearerAuth": []
-     }]
-     #swagger.parameters["secretkey"] = {
-      schema: 'THISISMYSECURETOKEN'
-     }
-   */
   const { secretkey } = req.params;
   const { authorization: token } = req.headers;
 
-  let tokenDecrypt: any = '';
+  let tokenDecrypt: any = "";
 
   if (secretkey === undefined) {
     tokenDecrypt = token?.split(' ')[0];
@@ -174,20 +193,47 @@ export async function showAllSessions(
     tokenDecrypt = secretkey;
   }
 
-  const arr: any = [];
-
   if (tokenDecrypt !== req.serverOptions.secretKey) {
-    res.status(400).json({
+    return res.status(400).json({
       response: false,
       message: 'The token is incorrect',
     });
   }
 
-  Object.keys(clientsArray).forEach((item) => {
-    arr.push({ session: item });
-  });
+  const sessionsDetails: any[] = [];
 
-  res.status(200).json({ response: await getAllTokens(req) });
+  for (const sessionName in clientsArray) {
+    const client = clientsArray[sessionName];
+    let pid: number | null = null;
+    let memoryUsage: number | null = null;
+    let cpuUsage: number | null = null;
+
+    try {
+      if (client) {
+        pid = client.getPID();
+      }
+
+
+      if (pid && pid !== 0) {
+        const stats = await pidusage(pid);
+
+        memoryUsage = Math.round(stats.memory / 1024 / 1024);
+        cpuUsage = stats.cpu;
+      }
+    } catch (e) {
+      pid = 0;
+      req.logger.error(`Error getting PID for session ${sessionName}: ${e}`);
+    }
+
+    sessionsDetails.push({
+      session: sessionName,
+      pid: pid,
+      memoryMb: memoryUsage,
+      cpuPercent: cpuUsage,
+    });
+  }
+
+  res.status(200).json({ response: sessionsDetails });
 }
 
 export async function startSession(req: Request, res: Response): Promise<any> {
@@ -210,14 +256,6 @@ export async function startSession(req: Request, res: Response): Promise<any> {
             properties: {
               webhook: { type: "string" },
               waitQrCode: { type: "boolean" },
-              proxy: {
-                type: "object",
-                properties: {
-                  url: { type: "string" },
-                  username: { type: "string" },
-                  password: { type: "string" },
-                }
-              }
             }
           },
           example: {
@@ -241,17 +279,6 @@ export async function startSession(req: Request, res: Response): Promise<any> {
 }
 
 export async function closeSession(req: Request, res: Response): Promise<any> {
-  /**
-   * #swagger.tags = ["Auth"]
-     #swagger.operationId = 'closeSession'
-     #swagger.autoBody=true
-     #swagger.security = [{
-            "bearerAuth": []
-     }]
-     #swagger.parameters["session"] = {
-      schema: 'NERDWHATS_AMERICA'
-     }
-   */
   const session = req.session;
   try {
     if ((clientsArray as any)[session].status === null) {
@@ -520,21 +547,8 @@ export async function getSessionState(req: Request, res: Response) {
 }
 
 export async function getQrCode(req: Request, res: Response) {
-  /**
-   * #swagger.tags = ["Auth"]
-     #swagger.autoBody=false
-     #swagger.operationId = 'getQrCode'
-     #swagger.security = [{
-            "bearerAuth": []
-     }]
-     #swagger.parameters["session"] = {
-      schema: 'NERDWHATS_AMERICA'
-     }
-   */
   try {
     if (req?.client?.urlcode) {
-      // We add options to generate the QR code in higher resolution
-      // The /qrcode-session request will now return a readable qrcode.
       const qrOptions = {
         errorCorrectionLevel: 'M' as const,
         type: 'image/png' as const,

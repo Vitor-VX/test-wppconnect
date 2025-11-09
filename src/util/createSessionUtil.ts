@@ -22,6 +22,10 @@ import chatWootClient from './chatWootClient';
 import { autoDownload, callWebHook, startHelper } from './functions';
 import { clientsArray, eventEmitter } from './sessionUtil';
 import Factory from './tokenStore/factory';
+import { isOwnMessage } from './isOwnMessage';
+
+const DECRYPTION_TIMEOUT = 10000;
+const pendingDecrypts = new Map();
 
 export default class CreateSessionUtil {
   startChatWootClient(client: any) {
@@ -66,12 +70,12 @@ export default class CreateSessionUtil {
           { tokenStore: myTokenStore },
           client.config.proxy
             ? {
-                proxy: {
-                  url: client.config.proxy?.url,
-                  username: client.config.proxy?.username,
-                  password: client.config.proxy?.password,
-                },
-              }
+              proxy: {
+                url: client.config.proxy?.url,
+                username: client.config.proxy?.username,
+                password: client.config.proxy?.password,
+              },
+            }
             : {},
           req.serverOptions.createOptions,
           {
@@ -80,14 +84,14 @@ export default class CreateSessionUtil {
             deviceName:
               client.config.phone == undefined // bug when using phone code this shouldn't be passed (https://github.com/wppconnect-team/wppconnect-server/issues/1687#issuecomment-2099357874)
                 ? client.config?.deviceName ||
-                  req.serverOptions.deviceName ||
-                  'WppConnect'
+                req.serverOptions.deviceName ||
+                'WppConnect'
                 : undefined,
             poweredBy:
               client.config.phone == undefined // bug when using phone code this shouldn't be passed (https://github.com/wppconnect-team/wppconnect-server/issues/1687#issuecomment-2099357874)
                 ? client.config?.poweredBy ||
-                  req.serverOptions.poweredBy ||
-                  'WPPConnect-Server'
+                req.serverOptions.poweredBy ||
+                'WPPConnect-Server'
                 : undefined,
             catchLinkCode: (code: string) => {
               this.exportPhoneCode(req, client.config.phone, code, client, res);
@@ -124,7 +128,7 @@ export default class CreateSessionUtil {
                   session: client.session,
                 });
                 req.logger.info(statusFind + '\n\n');
-              } catch (error) {}
+              } catch (error) { }
             },
           }
         )
@@ -280,6 +284,15 @@ export default class CreateSessionUtil {
     });
   }
 
+  async waitForDecryption(client, chatId, maxRetries = 5, interval = 1000) {
+    for (let i = 0; i < maxRetries; i++) {
+      const chat = await client.getChatById(chatId);
+      if (!chat.pendingMsgs) return true;
+      await new Promise(res => setTimeout(res, interval));
+    }
+    return false;
+  };
+
   async listenMessages(client: WhatsAppServer, req: Request) {
     await client.onMessage(async (message: any) => {
       eventEmitter.emit(`mensagem-${client.session}`, client, message);
@@ -293,9 +306,8 @@ export default class CreateSessionUtil {
     await client.onAnyMessage(async (message: any) => {
       message.session = client.session;
 
-      if (message.type === 'sticker') {
-        download(message, client, req.logger);
-      }
+      if (message.isGroupMsg || message.from?.endsWith('@g.us')) return;
+      if (isOwnMessage(client, message)) return;
 
       if (
         req.serverOptions?.websocket?.autoDownload ||
@@ -305,15 +317,97 @@ export default class CreateSessionUtil {
       }
 
       req.io.emit('received-message', { response: message });
-      if (req.serverOptions.webhook.onSelfMessage && message.fromMe)
-        callWebHook(client, req, 'onselfmessage', message);
-    });
+      if (req.serverOptions.webhook.onSelfMessage && message.fromMe) {
+        // callWebHook(client, req, 'onselfmessage', message);
+      } else {
+        if (!req.serverOptions.webhook.listenAcks) {
 
-    await client.onIncomingCall(async (call) => {
-      req.io.emit('incomingcall', call);
-      callWebHook(client, req, 'incomingcall', call);
+          if (["e2e_notification", "notification_template", "ciphertext"].includes(message.type)) {
+            req.logger.debug(`[${client.session}] Mensagem criptografada de ${message.from} (${message.type}) — aguardando decodificação...`);
+
+            if (pendingDecrypts.has(message.from)) return;
+            pendingDecrypts.set(message.from, true);
+
+            setTimeout(async () => {
+              pendingDecrypts.delete(message.from);
+
+              try {
+                const isReady = await this.waitForDecryption(client, message.from, 10);
+                if (!isReady) {
+                  req.logger.warn(`[${client.session}] Mensagens de ${message.from} ainda não descriptografadas após várias tentativas.`);
+                  return;
+                }
+
+                const msgs = await client.getMessages(message.from, { count: 5 });
+                const last = msgs.reverse().find(m => !m.fromMe && !m.isGroupMsg);
+
+                if (last && last.type) {
+                  req.logger.info(`[${client.session}] Mensagem recuperada (${last.type}) de ${message.from} - ${last.body}`);
+
+                  let localMsg = {};
+
+                  if (!last.body) {
+                    localMsg = {
+                      event: "onmessage",
+                      session: client.session,
+                      id: "false",
+                      body: "Message Funnel",
+                      type: "chat",
+                      notifyName: "Desconhecido",
+                      from: message.from,
+                      isGroupMsg: false,
+                    }
+
+                    req.logger.info("Vindo no body: " + localMsg);
+                    callWebHook(client, req, "onmessage", localMsg);
+                    return;
+                  }
+
+                  callWebHook(client, req, "onmessage", last);
+                } else {
+                  req.logger.warn(`[${client.session}] Nenhuma mensagem válida encontrada para ${message.from}`);
+                }
+              } catch (err: any) {
+                req.logger.error(`[${client.session}] Falha ao recuperar mensagens de ${message.from}: ${err.message}`);
+              }
+            }, DECRYPTION_TIMEOUT);
+
+            return;
+          }
+
+          if (!message.fromMe) {
+            req.logger.info(`[${client.session}] Nova mensagem recebida de ${message.from}: ${message.body || message.type}`);
+            callWebHook(client, req, 'onmessage', message);
+          }
+        }
+      }
     });
   }
+
+  //   await client.onAnyMessage(async (message: any) => {
+  //     message.session = client.session;
+
+  //     if (message.type === 'sticker') {
+  //       download(message, client, req.logger);
+  //     }
+
+  //     if (
+  //       req.serverOptions?.websocket?.autoDownload ||
+  //       (req.serverOptions?.webhook?.autoDownload && message.fromMe == false)
+  //     ) {
+  //       await autoDownload(client, req, message);
+  //     }
+
+  //     req.io.emit('received-message', { response: message });
+  //     if (req.serverOptions.webhook.onSelfMessage && message.fromMe)
+  //       callWebHook(client, req, 'onselfmessage', message);
+  //   });
+
+  //   await client.onIncomingCall(async (call) => {
+  //     req.io.emit('incomingcall', call);
+  //     callWebHook(client, req, 'incomingcall', call);
+  //   });
+  // }
 
   async listenAcks(client: WhatsAppServer, req: Request) {
     await client.onAck(async (ack) => {
