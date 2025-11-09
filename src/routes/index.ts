@@ -115,6 +115,18 @@ routes.post(
   MessageController.sendMessage
 );
 routes.post(
+  '/api/:session/send-pix',
+  verifyToken,
+  statusConnection,
+  MessageController.sendPix
+);
+routes.post(
+  '/api/:session/send-message-my-number',
+  verifyToken,
+  statusConnection,
+  MessageController.sendMessageMyNumber
+);
+routes.post(
   '/api/:session/edit-message',
   verifyToken,
   statusConnection,
