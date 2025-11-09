@@ -39,7 +39,6 @@ export default async function statusConnection(
         if (req.body.isGroup || req.body.isNewsletter) {
           localArr[index] = contact;
         } else if (numbers.indexOf(contact) < 0) {
-          console.log(contact);
           const profile: any = await req.client
             .checkNumberStatus(contact)
             .catch((error) => console.log(error));
