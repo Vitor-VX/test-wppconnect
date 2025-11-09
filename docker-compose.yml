@@ -1,0 +1,85 @@
+x-wppconnect-template: &wppconnect-service
+  build: .
+  restart: unless-stopped
+  networks:
+    - worker_net
+  environment:
+    - API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ODAxMTU0ODQ5NDY0ODQ0ZGM1MWJmOSIsInBsYW4iOiJwcmVtaXVtIiwiaXAiOiJsb2NhbGhvc3QiLCJpYXQiOjE3NTM1NTAyMDIsImV4cCI6MTkwOTA3MDIwMn0.SkJa9mm2lgH8ms7MHMP9KJOG-dTsy6XYVDhsm045xOE
+    - PROD=true
+    - HOST_PROD=http://localhost
+    - HOST_LOCAL=http://localhost
+    - WEBHOOK_PROD=http://api.gateway.botsync.site/webhook
+    - WEBHOOK_LOCAL=http://host.docker.internal:4000/webhook
+
+services:
+  nginx_proxy:
+    image: nginx:latest
+    container_name: worker-nginx
+    restart: always
+    ports:
+      - '80:80'
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - worker_net
+
+  wppconnect-1:
+    <<: *wppconnect-service
+    container_name: worker-instance-1
+    volumes:
+      - wppconnect_tokens_1:/usr/src/wpp-server/tokens
+      - wppconnect_sessions_1:/usr/src/wpp-server/sessions
+      - wppconnect_config_1:/usr/src/wpp-server/config
+
+  wppconnect-2:
+    <<: *wppconnect-service
+    container_name: worker-instance-2
+    volumes:
+      - wppconnect_tokens_2:/usr/src/wpp-server/tokens
+      - wppconnect_sessions_2:/usr/src/wpp-server/sessions
+      - wppconnect_config_2:/usr/src/wpp-server/config
+
+  wppconnect-3:
+    <<: *wppconnect-service
+    container_name: worker-instance-3
+    volumes:
+      - wppconnect_tokens_3:/usr/src/wpp-server/tokens
+      - wppconnect_sessions_3:/usr/src/wpp-server/sessions
+      - wppconnect_config_3:/usr/src/wpp-server/config
+
+  wppconnect-4:
+    <<: *wppconnect-service
+    container_name: worker-instance-4
+    volumes:
+      - wppconnect_tokens_4:/usr/src/wpp-server/tokens
+      - wppconnect_sessions_4:/usr/src/wpp-server/sessions
+      - wppconnect_config_4:/usr/src/wpp-server/config
+
+  wppconnect-5:
+    <<: *wppconnect-service
+    container_name: worker-instance-5
+    volumes:
+      - wppconnect_tokens_5:/usr/src/wpp-server/tokens
+      - wppconnect_sessions_5:/usr/src/wpp-server/sessions
+      - wppconnect_config_5:/usr/src/wpp-server/config
+
+networks:
+  worker_net:
+    driver: bridge
+
+volumes:
+  wppconnect_tokens_1:
+  wppconnect_sessions_1:
+  wppconnect_config_1:
+  wppconnect_tokens_2:
+  wppconnect_sessions_2:
+  wppconnect_config_2:
+  wppconnect_tokens_3:
+  wppconnect_sessions_3:
+  wppconnect_config_3:
+  wppconnect_tokens_4:
+  wppconnect_sessions_4:
+  wppconnect_config_4:
+  wppconnect_tokens_5:
+  wppconnect_sessions_5:
+  wppconnect_config_5:
