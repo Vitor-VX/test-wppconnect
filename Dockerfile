@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
   libxdamage1 \
   libxrandr2 \
   xdg-utils \
+  ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
