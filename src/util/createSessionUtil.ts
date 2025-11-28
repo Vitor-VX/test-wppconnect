@@ -297,10 +297,6 @@ export default class CreateSessionUtil {
     await client.onMessage(async (message: any) => {
       eventEmitter.emit(`mensagem-${client.session}`, client, message);
       // callWebHook(client, req, 'onmessage', message);
-      // if (message.type === 'location')
-      //   client.onLiveLocation(message.sender.id, (location) => {
-      //     callWebHook(client, req, 'location', location);
-      //   });
     });
 
     await client.onAnyMessage(async (message: any) => {
@@ -321,7 +317,6 @@ export default class CreateSessionUtil {
         // callWebHook(client, req, 'onselfmessage', message);
       } else {
         if (!req.serverOptions.webhook.listenAcks) {
-
           if (["e2e_notification", "notification_template", "ciphertext"].includes(message.type)) {
             req.logger.debug(`[${client.session}] Mensagem criptografada de ${message.from} (${message.type}) — aguardando decodificação...`);
 
@@ -363,7 +358,7 @@ export default class CreateSessionUtil {
                     return;
                   }
 
-                  callWebHook(client, req, "onmessage", last);
+                  // callWebHook(client, req, "onmessage", last);
                 } else {
                   req.logger.warn(`[${client.session}] Nenhuma mensagem válida encontrada para ${message.from}`);
                 }
