@@ -5,7 +5,7 @@ x-wppconnect-template: &wppconnect-service
     - worker_net
   environment:
     - API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ODAxMTU0ODQ5NDY0ODQ0ZGM1MWJmOSIsInBsYW4iOiJwcmVtaXVtIiwiaXAiOiJsb2NhbGhvc3QiLCJpYXQiOjE3NTM1NTAyMDIsImV4cCI6MTkwOTA3MDIwMn0.SkJa9mm2lgH8ms7MHMP9KJOG-dTsy6XYVDhsm045xOE
-    - PROD=TRUE
+    - PROD=true
     - HOST_PROD=http://localhost
     - HOST_LOCAL=http://localhost
     - WEBHOOK_PROD=http://api.gateway.botsync.site/webhook
