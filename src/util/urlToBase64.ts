@@ -1,7 +1,15 @@
 import ffmpeg from 'fluent-ffmpeg';
 import { PassThrough } from 'stream';
 
+function isBase64Data(input: string): boolean {
+  return input.startsWith("data:");
+}
+
 export async function urlToBase64(url: string) {
+  if (isBase64Data(url)) {
+    return url;
+  };
+
   const res = await fetch(url);
   const buffer = await res.arrayBuffer();
   const base64 = Buffer.from(buffer).toString('base64');
